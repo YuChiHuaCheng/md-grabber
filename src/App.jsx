@@ -19,7 +19,7 @@ function App() {
   const handleDownload = () => {
     setErrorMsg('');
     setStatus('loading');
-    setStatusMsg('Connecting to Jina Reader...');
+    setStatusMsg('正在提取页面内容...');
 
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs[0];
@@ -27,19 +27,16 @@ function App() {
 
       if (tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') || tab.url.startsWith('about:')) {
         setStatus('error');
-        setErrorMsg('Cannot run on internal browser pages.');
+        setErrorMsg('无法在浏览器内部页面运行，请在正常网页上使用。');
         return;
       }
 
-      // Send directly to background — no content script dependency
-      chrome.runtime.sendMessage({
-        type: 'fetch-jina-markdown',
-        url: tab.url,
-        tabId: tab.id
-      }, (response) => {
+      // Send to content script for local extraction
+      chrome.tabs.sendMessage(tab.id, { action: 'downloadMarkdown' }, (response) => {
         if (chrome.runtime.lastError) {
           setStatus('error');
-          setErrorMsg(chrome.runtime.lastError.message);
+          setErrorMsg('页面连接失败，请刷新页面后重试。');
+          return;
         }
       });
     });
@@ -51,7 +48,7 @@ function App() {
           setStatusMsg(msg.message);
         } else if (msg.status === 'done') {
           setStatus('done');
-          setStatusMsg('Download started!');
+          setStatusMsg('下载成功！');
           chrome.runtime.onMessage.removeListener(listener);
           setTimeout(() => window.close(), 1200);
         } else if (msg.status === 'error') {
@@ -79,7 +76,7 @@ function App() {
 
       <main className="popup-content">
         <p className="description">
-          一键抓取任意网页的纯净 Markdown，支持登录墙页面。
+          一键提取当前页面正文，本地转换为 Markdown，无需联网。
         </p>
 
         <div className="action-buttons">

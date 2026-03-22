@@ -1,45 +1,34 @@
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('Jina MD Grabber installed');
+  console.log('页面抓取 installed (local mode)');
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.type === 'fetch-jina-markdown') {
-    handleFetchMarkdown(request.url, request.tabId);
+  if (request.type === 'download-markdown') {
+    handleDownload(request.markdown, request.url, request.title, sender.tab?.id);
     sendResponse({ status: 'processing' });
   }
   return true;
 });
 
-async function handleFetchMarkdown(pageUrl, tabId) {
+function handleDownload(markdown, pageUrl, pageTitle, tabId) {
   const notify = (status, message) => {
     chrome.runtime.sendMessage({ target: 'popup', status, message }).catch(() => {});
   };
 
   try {
-    notify('progress', 'Fetching from r.jina.ai...');
-
-    const jinaUrl = 'https://r.jina.ai/' + pageUrl;
-    const response = await fetch(jinaUrl, {
-      method: 'GET',
-      headers: { 'Accept': 'text/plain' }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Jina API returned ${response.status}: ${response.statusText}`);
-    }
-
-    notify('progress', 'Received Markdown, preparing download...');
-
-    const markdown = await response.text();
-
-    // Build a meaningful filename from the URL
+    // Build filename from title or URL
     let filename = 'page.md';
     try {
-      const u = new URL(pageUrl);
-      const pathPart = u.pathname.replace(/^\/+|\/+$/g, '').replace(/\//g, '-') || u.hostname;
-      filename = (pathPart.length > 60 ? pathPart.substring(0, 60) : pathPart) + '.md';
-      // Sanitize
-      filename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+      if (pageTitle) {
+        filename = pageTitle
+          .replace(/[\\/:*?"<>|]/g, '_')  // Remove illegal chars
+          .replace(/\s+/g, '_')
+          .substring(0, 60) + '.md';
+      } else {
+        const u = new URL(pageUrl);
+        const pathPart = u.pathname.replace(/^\/+|\/+$/g, '').replace(/\//g, '-') || u.hostname;
+        filename = pathPart.substring(0, 60) + '.md';
+      }
     } catch (_) {}
 
     // Convert to data URL for download
@@ -53,9 +42,15 @@ async function handleFetchMarkdown(pageUrl, tabId) {
         saveAs: true
       }, (downloadId) => {
         if (chrome.runtime.lastError) {
-          notify('error', 'Download failed: ' + chrome.runtime.lastError.message);
+          notify('error', '下载失败: ' + chrome.runtime.lastError.message);
+          if (tabId) {
+            chrome.tabs.sendMessage(tabId, { action: 'toast', message: '下载失败: ' + chrome.runtime.lastError.message }).catch(() => {});
+          }
         } else {
-          notify('done', 'Download started!');
+          notify('done', '下载成功！');
+          if (tabId) {
+            chrome.tabs.sendMessage(tabId, { action: 'toast', message: 'Markdown 下载成功！ ✅' }).catch(() => {});
+          }
         }
       });
     };
@@ -63,7 +58,7 @@ async function handleFetchMarkdown(pageUrl, tabId) {
     reader.readAsDataURL(blob);
 
   } catch (err) {
-    console.error('Jina fetch error:', err);
+    console.error('Download error:', err);
     notify('error', err.message);
   }
 }

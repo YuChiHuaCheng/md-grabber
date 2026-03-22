@@ -4,7 +4,7 @@ export default defineManifest({
   manifest_version: 3,
   name: "页面抓取",
   version: "1.0.0",
-  description: "一键抓取任意网页的纯净 Markdown 内容，支持登录墙页面。Grab clean Markdown from any web page via Jina Reader API.",
+  description: "一键提取任意网页正文并转换为纯净 Markdown，完全本地运行，无需联网。Extract clean Markdown from any web page, fully offline.",
   icons: {
     "16": "public/icon-16.png",
     "48": "public/icon-48.png",
