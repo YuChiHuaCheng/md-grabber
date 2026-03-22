@@ -5,11 +5,11 @@
 <h1 align="center">页面抓取</h1>
 
 <p align="center">
-  <strong>一键抓取任意网页的纯净 Markdown 内容</strong>
+  <strong>一键提取任意网页正文，本地转换为纯净 Markdown</strong>
 </p>
 
 <p align="center">
-  Chrome 扩展 · Manifest V3 · 基于 Jina Reader API
+  Chrome 扩展 · Manifest V3 · 完全离线 · 零外部依赖
 </p>
 
 ---
@@ -17,9 +17,10 @@
 ## ✨ 功能特点
 
 - 🔗 **一键抓取** — 点击按钮即可将当前网页转换为干净的 Markdown 文件
-- 🔐 **穿透登录墙** — 通过 [Jina Reader API](https://jina.ai/reader/) 抓取，即使需要登录的页面（如 X/Twitter）也能获取内容
+- 🔒 **完全离线** — 所有提取和转换在浏览器本地完成，无需联网，不依赖任何外部 API
+- 🔐 **支持登录页面** — 你已登录的页面（如 X/Twitter、微信公众号）可以直接抓取完整内容
 - 📄 **直接下载** — 自动保存为 `.md` 文件，无需手动复制粘贴
-- ⚡ **轻量快速** — 无需 PDF 渲染引擎，极简架构，秒级完成
+- ⚡ **极速** — 本地 DOM 提取，毫秒级完成
 
 ## 🚀 安装使用
 
@@ -53,13 +54,32 @@ npm run build
 | [Vite](https://vite.dev) | 构建工具 |
 | [React](https://react.dev) | 弹出窗口 UI |
 | [@crxjs/vite-plugin](https://crxjs.dev/vite-plugin) | Chrome 扩展打包 |
-| [Jina Reader API](https://jina.ai/reader/) | 网页内容提取 |
+| [@mozilla/readability](https://github.com/mozilla/readability) | 正文提取（Firefox 阅读模式同款引擎） |
+| [Turndown](https://github.com/mixmark-io/turndown) | HTML → Markdown 转换 |
 | [Lucide React](https://lucide.dev) | 图标库 |
+
+## ⚙️ 工作原理
+
+```
+用户点击「抓取 Markdown」
+        ↓
+  Popup 发送消息给 Content Script
+        ↓
+  Content Script 克隆当前页面 DOM
+        ↓
+  Readability 智能提取正文（去除导航/广告/侧边栏）
+        ↓
+  Turndown 将 HTML 转为 Markdown
+        ↓
+  Background 接收文本 → 触发 chrome.downloads
+        ↓
+  用户保存 .md 文件 ✅
+```
 
 ## 📁 项目结构
 
 ```
-jina-md-grabber/
+md-grabber/
 ├── manifest.js          # Chrome MV3 清单
 ├── vite.config.js       # Vite 构建配置
 ├── index.html           # 弹出窗口入口
@@ -72,25 +92,9 @@ jina-md-grabber/
     ├── App.jsx          # 弹出窗口组件
     ├── App.css          # 弹出窗口样式
     ├── index.css        # 全局样式
-    ├── background.js    # 后台脚本（Jina 请求 + 下载）
-    ├── content.js       # 内容脚本（Toast 通知）
+    ├── background.js    # 后台脚本（文件下载）
+    ├── content.js       # 内容脚本（Readability + Turndown 提取）
     └── content.css      # Toast 样式
-```
-
-## ⚙️ 工作原理
-
-```
-用户点击「抓取 Markdown」
-        ↓
-  Popup 发送消息给 Background
-        ↓
-  Background 调用 https://r.jina.ai/{当前页面URL}
-        ↓
-  Jina 返回纯净 Markdown 文本
-        ↓
-  转换为 Blob → 触发 chrome.downloads
-        ↓
-  用户保存 .md 文件 ✅
 ```
 
 ## 📝 License
@@ -100,5 +104,5 @@ MIT
 ---
 
 <p align="center">
-  Made with ❤️ using <a href="https://jina.ai/reader/">Jina Reader API</a>
+  Made with ❤️ · Powered by <a href="https://github.com/mozilla/readability">Readability</a> & <a href="https://github.com/mixmark-io/turndown">Turndown</a>
 </p>
