@@ -31,7 +31,8 @@ export default defineManifest({
   permissions: [
     "activeTab",
     "downloads",
-    "scripting"
+    "scripting",
+    "storage"
   ],
   host_permissions: [
     "<all_urls>"

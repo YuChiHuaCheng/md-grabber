@@ -1,6 +1,13 @@
+import { loadDefaultFolderHandle } from './downloadFolderStore';
+
 chrome.runtime.onInstalled.addListener(() => {
   console.log('页面抓取 installed (hybrid mode)');
 });
+
+const DOWNLOAD_SETTINGS_DEFAULTS = {
+  askEveryTime: true,
+  defaultFolderName: ''
+};
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'download-markdown') {
@@ -31,7 +38,7 @@ async function fetchJinaApi(url, title, tabId) {
     const markdown = await response.text();
     const finalMarkdown = normalizeCloudMarkdown(markdown, title, url);
     notify('progress', '云端补全成功，正在下载...');
-    handleDownload(finalMarkdown, url, title, tabId);
+    await handleDownload(finalMarkdown, url, title, tabId);
   } catch (err) {
     console.error('Jina API Fetch Error:', err);
     notify('error', '云端提取失败: ' + err.message);
@@ -111,10 +118,51 @@ function optimizeMarkdown(markdown) {
   return `${out.trim()}\n`;
 }
 
-function handleDownload(markdown, pageUrl, pageTitle, tabId) {
+function getDownloadSettings() {
+  return new Promise((resolve) => {
+    if (!chrome.storage?.sync) {
+      resolve(DOWNLOAD_SETTINGS_DEFAULTS);
+      return;
+    }
+
+    chrome.storage.sync.get(DOWNLOAD_SETTINGS_DEFAULTS, (stored) => {
+      if (chrome.runtime.lastError) {
+        console.warn('读取下载设置失败，回退默认值:', chrome.runtime.lastError.message);
+        resolve(DOWNLOAD_SETTINGS_DEFAULTS);
+        return;
+      }
+      resolve({
+        askEveryTime: stored.askEveryTime !== false,
+        defaultFolderName: typeof stored.defaultFolderName === 'string' ? stored.defaultFolderName : ''
+      });
+    });
+  });
+}
+
+async function saveToDefaultFolder(markdown, filename) {
+  const directoryHandle = await loadDefaultFolderHandle().catch(() => null);
+  if (!directoryHandle) {
+    throw new Error('默认文件夹不存在，请重新选择');
+  }
+
+  if (directoryHandle.queryPermission) {
+    const permission = await directoryHandle.queryPermission({ mode: 'readwrite' });
+    if (permission !== 'granted') {
+      throw new Error('默认文件夹写入权限已失效，请重新选择');
+    }
+  }
+
+  const fileHandle = await directoryHandle.getFileHandle(filename, { create: true });
+  const writable = await fileHandle.createWritable();
+  await writable.write(markdown);
+  await writable.close();
+}
+
+async function handleDownload(markdown, pageUrl, pageTitle, tabId) {
   try {
     notify('progress', '正在准备下载文件...');
 
+    const settings = await getDownloadSettings();
     let filename = 'page.md';
     try {
       if (pageTitle) {
@@ -138,6 +186,21 @@ function handleDownload(markdown, pageUrl, pageTitle, tabId) {
 
     notify('progress', '正在优化 Markdown 格式...');
     const optimizedMarkdown = optimizeMarkdown(markdown);
+
+    if (!settings.askEveryTime) {
+      try {
+        notify('progress', '正在保存到默认文件夹...');
+        await saveToDefaultFolder(optimizedMarkdown, filename);
+        notify('done', `已保存到默认文件夹：${settings.defaultFolderName || '已选目录'}`);
+        if (tabId) {
+          chrome.tabs.sendMessage(tabId, { action: 'toast', message: 'Markdown 已保存到默认文件夹 ✅' }).catch(() => {});
+        }
+        return;
+      } catch (err) {
+        notify('progress', `默认文件夹不可用，回退浏览器下载：${err.message}`);
+      }
+    }
+
     const blob = new Blob([optimizedMarkdown], { type: 'text/markdown;charset=utf-8' });
     const reader = new FileReader();
 
@@ -145,7 +208,7 @@ function handleDownload(markdown, pageUrl, pageTitle, tabId) {
       chrome.downloads.download({
         url: reader.result,
         filename: filename,
-        saveAs: true
+        saveAs: settings.askEveryTime
       }, () => {
         if (chrome.runtime.lastError) {
           notify('error', '下载失败: ' + chrome.runtime.lastError.message);

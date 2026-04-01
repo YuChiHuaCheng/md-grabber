@@ -1,12 +1,26 @@
 import { useState, useEffect } from 'react';
 import { FileText, AlertCircle } from 'lucide-react';
 import './App.css';
+import {
+  saveDefaultFolderHandle,
+  loadDefaultFolderHandle,
+  clearDefaultFolderHandle
+} from './downloadFolderStore';
+
+const DOWNLOAD_SETTINGS_DEFAULTS = {
+  askEveryTime: true,
+  defaultFolderName: ''
+};
 
 function App() {
   const [currentUrl, setCurrentUrl] = useState('');
   const [status, setStatus] = useState(''); // '', 'loading', 'done', 'error'
   const [statusMsg, setStatusMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [askEveryTime, setAskEveryTime] = useState(true);
+  const [defaultFolderName, setDefaultFolderName] = useState('');
+  const [folderReady, setFolderReady] = useState(false);
+  const [pickingFolder, setPickingFolder] = useState(false);
 
   useEffect(() => {
     if (chrome && chrome.tabs) {
@@ -14,6 +28,35 @@ function App() {
         if (tabs[0]) setCurrentUrl(tabs[0].url);
       });
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSettings = async () => {
+      let stored = DOWNLOAD_SETTINGS_DEFAULTS;
+      if (chrome.storage?.sync) {
+        stored = await new Promise((resolve) => {
+          chrome.storage.sync.get(DOWNLOAD_SETTINGS_DEFAULTS, (value) => {
+            if (chrome.runtime.lastError) {
+              resolve(DOWNLOAD_SETTINGS_DEFAULTS);
+              return;
+            }
+            resolve(value);
+          });
+        });
+      }
+
+      const handle = await loadDefaultFolderHandle().catch(() => null);
+      if (cancelled) return;
+
+      setAskEveryTime(stored.askEveryTime !== false);
+      setDefaultFolderName(typeof stored.defaultFolderName === 'string' ? stored.defaultFolderName : '');
+      setFolderReady(Boolean(handle));
+    };
+
+    loadSettings();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -40,8 +83,67 @@ function App() {
     return () => chrome.runtime.onMessage.removeListener(listener);
   }, []);
 
+  const persistSettings = (nextAskEveryTime, nextDefaultFolderName) => {
+    if (!chrome.storage?.sync) return;
+    chrome.storage.sync.set({
+      askEveryTime: nextAskEveryTime,
+      defaultFolderName: nextDefaultFolderName
+    });
+  };
+
+  const handleToggleAskEveryTime = (event) => {
+    const nextValue = event.target.checked;
+    setAskEveryTime(nextValue);
+    persistSettings(nextValue, defaultFolderName);
+  };
+
+  const handlePickFolder = async () => {
+    if (!window.showDirectoryPicker) {
+      setErrorMsg('当前浏览器不支持文件夹选择器，请保持“每次都选择保存位置”。');
+      return;
+    }
+
+    try {
+      setPickingFolder(true);
+      const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      if (handle.requestPermission) {
+        const permission = await handle.requestPermission({ mode: 'readwrite' });
+        if (permission !== 'granted') {
+          throw new Error('未获得默认文件夹写入权限');
+        }
+      }
+
+      const folderName = handle.name || '已选择文件夹';
+      await saveDefaultFolderHandle(handle);
+      setDefaultFolderName(folderName);
+      setFolderReady(true);
+      setErrorMsg('');
+      persistSettings(askEveryTime, folderName);
+    } catch (err) {
+      if (err?.name !== 'AbortError') {
+        setErrorMsg(err?.message || '选择默认文件夹失败');
+      }
+    } finally {
+      setPickingFolder(false);
+    }
+  };
+
+  const handleClearFolder = async () => {
+    await clearDefaultFolderHandle().catch(() => {});
+    setDefaultFolderName('');
+    setFolderReady(false);
+    persistSettings(askEveryTime, '');
+  };
+
   const handleDownload = () => {
     setErrorMsg('');
+    if (!askEveryTime && !folderReady) {
+      setStatus('error');
+      setStatusMsg('');
+      setErrorMsg('请先选择默认文件夹，或打开“每次都选择保存位置”。');
+      return;
+    }
+
     setStatus('loading');
     setStatusMsg('本地提取中...');
 
@@ -98,6 +200,45 @@ function App() {
         <p className="helper-text">
           云端兜底仅发送当前页面 URL，不上传页面正文或 Cookie。
         </p>
+
+        <section className="settings-card">
+          <div className="setting-row">
+            <label htmlFor="ask-every-time" className="setting-label">每次都选择保存位置</label>
+            <input
+              id="ask-every-time"
+              type="checkbox"
+              checked={askEveryTime}
+              disabled={isLoading}
+              onChange={handleToggleAskEveryTime}
+            />
+          </div>
+          <div className="setting-row">
+            <span className="setting-label">
+              默认文件夹：{folderReady ? defaultFolderName : '未设置'}
+            </span>
+          </div>
+          <div className="setting-actions">
+            <button
+              type="button"
+              className="secondary-btn"
+              disabled={isLoading || pickingFolder}
+              onClick={handlePickFolder}
+            >
+              {pickingFolder ? '正在打开...' : '选择文件夹'}
+            </button>
+            <button
+              type="button"
+              className="secondary-btn danger-btn"
+              disabled={isLoading || pickingFolder || !folderReady}
+              onClick={handleClearFolder}
+            >
+              清除
+            </button>
+          </div>
+          <p className="setting-hint">
+            关闭“每次都选择保存位置”后，将直接保存到选中的本地文件夹。
+          </p>
+        </section>
 
         <div className="action-buttons">
           <button className="primary-btn" onClick={handleDownload} disabled={isLoading}>
