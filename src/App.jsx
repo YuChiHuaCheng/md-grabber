@@ -16,49 +16,66 @@ function App() {
     }
   }, []);
 
+  useEffect(() => {
+    const listener = (msg) => {
+      if (msg.target !== 'popup') return;
+
+      if (msg.status === 'progress') {
+        setStatus('loading');
+        setErrorMsg('');
+        setStatusMsg(msg.message);
+      } else if (msg.status === 'done') {
+        setStatus('done');
+        setErrorMsg('');
+        setStatusMsg(msg.message || '下载成功！');
+        setTimeout(() => window.close(), 1200);
+      } else if (msg.status === 'error') {
+        setStatus('error');
+        setStatusMsg('');
+        setErrorMsg(msg.message);
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }, []);
+
   const handleDownload = () => {
     setErrorMsg('');
     setStatus('loading');
-    setStatusMsg('正在提取页面内容...');
+    setStatusMsg('本地提取中...');
 
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs[0];
-      if (!tab) return;
+      if (!tab?.id || !tab.url) {
+        setStatus('error');
+        setStatusMsg('');
+        setErrorMsg('未找到当前页面，请重试。');
+        return;
+      }
 
       if (tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') || tab.url.startsWith('about:')) {
         setStatus('error');
+        setStatusMsg('');
         setErrorMsg('无法在浏览器内部页面运行，请在正常网页上使用。');
         return;
       }
 
-      // Send to content script for local extraction
       chrome.tabs.sendMessage(tab.id, { action: 'downloadMarkdown' }, (response) => {
         if (chrome.runtime.lastError) {
           setStatus('error');
+          setStatusMsg('');
           setErrorMsg('页面连接失败，请刷新页面后重试。');
           return;
         }
+
+        if (response?.status === 'error') {
+          setStatus('error');
+          setStatusMsg('');
+          setErrorMsg(response.message || '提取失败，请重试。');
+        }
       });
     });
-
-    // Listen for progress updates from background
-    const listener = (msg) => {
-      if (msg.target === 'popup') {
-        if (msg.status === 'progress') {
-          setStatusMsg(msg.message);
-        } else if (msg.status === 'done') {
-          setStatus('done');
-          setStatusMsg('下载成功！');
-          chrome.runtime.onMessage.removeListener(listener);
-          setTimeout(() => window.close(), 1200);
-        } else if (msg.status === 'error') {
-          setStatus('error');
-          setErrorMsg(msg.message);
-          chrome.runtime.onMessage.removeListener(listener);
-        }
-      }
-    };
-    chrome.runtime.onMessage.addListener(listener);
   };
 
   const isLoading = status === 'loading';
@@ -76,7 +93,10 @@ function App() {
 
       <main className="popup-content">
         <p className="description">
-          一键提取当前页面正文，本地转换为 Markdown，无需联网。
+          优先本地提取当前页面正文，复杂页面会自动切换云端补全。
+        </p>
+        <p className="helper-text">
+          云端兜底仅发送当前页面 URL，不上传页面正文或 Cookie。
         </p>
 
         <div className="action-buttons">

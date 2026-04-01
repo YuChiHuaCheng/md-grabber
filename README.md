@@ -5,11 +5,11 @@
 <h1 align="center">页面抓取</h1>
 
 <p align="center">
-  <strong>一键提取任意网页正文，本地转换为纯净 Markdown</strong>
+  <strong>一键提取任意网页正文，优先本地，必要时云端补全为 Markdown</strong>
 </p>
 
 <p align="center">
-  Chrome 扩展 · Manifest V3 · 完全离线 · 零外部依赖
+  Chrome 扩展 · Manifest V3 · 本地优先 · 自动云端兜底
 </p>
 
 ---
@@ -17,10 +17,11 @@
 ## ✨ 功能特点
 
 - 🔗 **一键抓取** — 点击按钮即可将当前网页转换为干净的 Markdown 文件
-- 🔒 **完全离线** — 所有提取和转换在浏览器本地完成，无需联网，不依赖任何外部 API
-- 🔐 **支持登录页面** — 你已登录的页面（如 X/Twitter、微信公众号）可以直接抓取完整内容
+- 🧠 **本地优先** — 优先在浏览器本地提取正文，能本地拿到的内容不走云端
+- ☁️ **自动云端补全** — 复杂页面、本地提取失败时自动切换 Jina 云端抓取，提高命中率
+- 🔐 **登录态页面尽量本地抓** — 当前页若已渲染出正文，会优先使用本地结果；不再承诺所有登录页都能完整本地提取
 - 📄 **直接下载** — 自动保存为 `.md` 文件，无需手动复制粘贴
-- ⚡ **极速** — 本地 DOM 提取，毫秒级完成
+- ⚡ **极速** — 本地命中时毫秒级完成，复杂页面自动补全不需要二次操作
 
 ## 🚀 安装使用
 
@@ -56,6 +57,8 @@ npm run build
 | [@crxjs/vite-plugin](https://crxjs.dev/vite-plugin) | Chrome 扩展打包 |
 | [@mozilla/readability](https://github.com/mozilla/readability) | 正文提取（Firefox 阅读模式同款引擎） |
 | [Turndown](https://github.com/mixmark-io/turndown) | HTML → Markdown 转换 |
+| [turndown-plugin-gfm](https://github.com/domchristie/turndown-plugin-gfm) | GFM 扩展（表格/任务列表/删除线） |
+| [Jina Reader](https://r.jina.ai/) | 云端兜底抓取 |
 | [Lucide React](https://lucide.dev) | 图标库 |
 
 ## ⚙️ 工作原理
@@ -65,13 +68,13 @@ npm run build
         ↓
   Popup 发送消息给 Content Script
         ↓
-  Content Script 克隆当前页面 DOM
+  Content Script 优先做本地提取
         ↓
-  Readability 智能提取正文（去除导航/广告/侧边栏）
+  本地结果可用 → 直接下载
         ↓
-  Turndown 将 HTML 转为 Markdown
+  本地结果不可用 → 请求 Jina 云端补全
         ↓
-  Background 接收文本 → 触发 chrome.downloads
+  Background 统一整理 Markdown → 触发 chrome.downloads
         ↓
   用户保存 .md 文件 ✅
 ```
@@ -92,8 +95,8 @@ md-grabber/
     ├── App.jsx          # 弹出窗口组件
     ├── App.css          # 弹出窗口样式
     ├── index.css        # 全局样式
-    ├── background.js    # 后台脚本（文件下载）
-    ├── content.js       # 内容脚本（Readability + Turndown 提取）
+    ├── background.js    # 后台脚本（云端兜底 + 文件下载）
+    ├── content.js       # 内容脚本（本地提取 + 自动兜底）
     └── content.css      # Toast 样式
 ```
 
