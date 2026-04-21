@@ -1,30 +1,39 @@
-# markitdown-local-tool
+# md-grabber (Local Minimal Tool)
 
-一个最小可用的本地转换工具（独立目录，不改你原来的项目），支持点击使用。
+一个本地 Markdown 转换工具，支持：
+- 点击网页使用（推荐）
+- 命令行使用
 
-它会用 [Microsoft MarkItDown](https://github.com/microsoft/markitdown) 把本地文件或 URL 转成 `.md`。
+底层基于 [Microsoft MarkItDown](https://github.com/microsoft/markitdown)。
 
-## 目录
+## 功能
 
-- `convert.sh`：命令行入口脚本
-- `web_app.py`：本地网页服务
-- `启动网页.command`：双击启动网页版（推荐）
+- 本地文件转 Markdown（如 PDF / DOCX / PPTX / XLSX / HTML 等）
+- URL 页面转 Markdown
+- 浏览器直接下载 `.md`
+- 首次运行自动准备 `uv` 与 MarkItDown 依赖
 
-## 点击使用（推荐）
+## 项目文件
 
-1. 打开目录：`/Users/dylanzeng/Desktop/agent-projects/markitdown-local-tool`
+- `web_app.py`：本地网页服务（上传文件 / 输入 URL）
+- `启动网页.command`：macOS 双击启动入口
+- `convert.sh`：命令行入口
+
+## 快速开始（点击使用）
+
+1. 进入项目目录
 2. 双击 `启动网页.command`
-3. 浏览器会自动打开网页
-4. 在页面里选择文件或粘贴 URL，然后点击按钮即可下载 `.md`
+3. 浏览器打开本地页面后，选择文件或粘贴 URL
+4. 点击按钮，自动下载 `.md`
 
-如果首次打开遇到 macOS 权限提示，请在“系统设置 -> 隐私与安全性”里允许执行。
+说明：
+- 服务默认监听 `127.0.0.1:8765`，端口占用时会自动换可用端口。
+- 停止服务：关闭终端窗口或按 `Ctrl + C`。
 
-## 用法
-
-如果你还是想用命令行，也支持：
+## 命令行用法（可选）
 
 ```bash
-./convert.sh <输入> [输出文件]
+./convert.sh <input> [output.md]
 ```
 
 示例：
@@ -40,18 +49,17 @@
 ./convert.sh ./demo.docx ./out/demo.md
 ```
 
-## 说明
+## 可选配置
 
-- 首次运行会自动安装 `uv`（如果系统没有），然后拉取并运行 MarkItDown。
-- 首次转换会比较慢（需要下载 Python 运行时和依赖）；后续会快很多。
-- 不会修改你之前的扩展项目目录：
-  - `/Users/dylanzeng/Desktop/agent-projects/jina-md-grabber`
-
-## 可选：固定 MarkItDown 版本
-
-脚本默认固定到一个已验证可用的 commit（避免每次追踪最新导致不稳定）。
-如果你想改版本，可以临时覆盖环境变量：
+可通过环境变量固定/切换 MarkItDown 版本：
 
 ```bash
 MARKITDOWN_SPEC='git+https://github.com/microsoft/markitdown.git@<commit>#subdirectory=packages/markitdown' ./convert.sh ./demo.pdf
 ```
+
+## 常见问题
+
+- **双击 `.command` 没反应**
+  - 在 macOS “系统设置 -> 隐私与安全性”中允许执行，或右键打开一次。
+- **首次转换较慢**
+  - 首次需要下载 Python 运行时与依赖，后续会明显更快。
